@@ -91,18 +91,22 @@
             function runOSCs(voice) {
                 let oscOUTS = [];
                 let outAccum = 0;
-                
+
                 for(let o = 0; o < 8; o ++) {
                     let phase = voice.oscs[o].phaseAccum;
                     for(let m = 0; m < 8; m++) {
-                        let mod = fpmul(voice.oscs[m].lastOut, voice.oscs[o].mod[m]);
+                        let mod;
+                        if(o !== m) mod = fpmul(voice.oscs[m].lastOut, voice.oscs[o].mod[m]);
+                        else {
+                            mod = fpmul(voice.oscs[m].lastOut + voice.oscs[m].out, voice.oscs[o].mod[m]);
+                        }
                         phase += mod;
                     }
 
-                    outAccum += fpmul(fpmul(getSIN(phase), voice.oscs[o].eg.out), voice.oscs[o].vol);
-                    oscOUTS[o] = getSIN(voice.oscs[o].phaseAccum);
+                    oscOUTS[o] = fpmul(getSIN(phase), voice.oscs[o].eg.out);
+                    outAccum += fpmul(oscOUTS[o],voice.oscs[o].vol);
                     voice.oscs[o].phaseAccum += voice.oscs[o].angVel;
-                    voice.oscs[o].phaseAccum &= fp(4095);
+                    voice.oscs[o].phaseAccum &= (fp(4095) | 65535);
                 }
 
                 for(let o = 0; o < 8; o++) {
@@ -169,7 +173,7 @@
             bla.oscs[0].angVel = fp(25);
             bla.oscs[1].angVel = fp(12.5);
             bla.oscs[0].vol = fp(1);
-            //bla.oscs[0].mod[1] = fp(4096);
+            bla.oscs[0].mod[0] = fp(2048);
 
             var c = document.createElement("canvas");
             c.width = 1900;
@@ -197,7 +201,7 @@
                 }
             });
 
-            let keyCodes = [90,83,88,68,67,86,71,66,72,78,74,77,188];
+            let keyCodes = [90,83,88,68,67,86,71,66,72,78,74,77,81,50,87,51,69,82,53,84,54,89,55,85,73,57,79,48,80];
             let keys = [false, false, false, false,
             false, false, false, false,
             false, false, false, false,
@@ -216,8 +220,7 @@
                         node.port.postMessage({type: "noteOn", value: onde});
                         keys[onde] = true;
                     }
-                }
-                
+                }                
             });
 
             window.addEventListener("keyup",function(e){

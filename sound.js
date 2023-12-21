@@ -86,12 +86,14 @@ function runOSCs(voice) {
     for(let o = 0; o < 8; o ++) {
         let phase = voice.oscs[o].phaseAccum;
         for(let m = 0; m < 8; m++) {
-            let mod = fpmul(voice.oscs[m].lastOut, voice.oscs[o].mod[m]);
+            let mod;
+            if(m !== o) mod = fpmul(voice.oscs[m].lastOut, voice.oscs[o].mod[m]);
+            else mod = fpmul((voice.oscs[m].lastOut + voice.oscs[m].out) >> 8, voice.oscs[o].mod[m]);
             phase += mod;
         }
 
-        outAccum += fpmul(fpmul(getSIN(phase), voice.oscs[o].eg.out), voice.oscs[o].vol);
-        oscOUTS[o] = getSIN(voice.oscs[o].phaseAccum);
+        oscOUTS[o] = fpmul(getSIN(phase), voice.oscs[o].eg.out);
+        outAccum += fpmul(oscOUTS[o], voice.oscs[o].vol);
         voice.oscs[o].phaseAccum += voice.oscs[o].angVel;
         voice.oscs[o].phaseAccum &= (fp(4095) | 65535);
     }
@@ -160,11 +162,11 @@ var bla = getVoice();
 bla.oscs[1].angVel = freqToVel(445);
 bla.oscs[0].angVel = freqToVel(445);
 bla.oscs[0].vol = fp(1);
-//bla.oscs[0].mod[0] = fp(1024);
+bla.oscs[0].mod[0] = fp(16384 * 8);
 //bla.oscs[0].mod[1] = fp(256);
 
 bla.oscs[0].eg.a = fp(0.01);
-bla.oscs[0].eg.d = fp(0.0001);
+bla.oscs[0].eg.d = fp(0.00001);
 
 
 //bla.oscs[0].eg.d = 0.01;
@@ -192,10 +194,10 @@ class fmSynth extends AudioWorkletProcessor {
         if(m.type === "noteOn") {
             noteOn(bla);
 
-            bla.oscs[0].angVel = freqToVel(440 * Math.pow(Math.pow(2, 1 / 12), m.value) * Math.pow(Math.pow(2, 1 / 12), -12));
-            //bla.oscs[1].angVel = freqToVel(220 * Math.pow(Math.pow(2, 1 / 12), m.value));
+            bla.oscs[0].angVel = freqToVel(110 * Math.pow(Math.pow(2, 1 / 12), m.value) * Math.pow(Math.pow(2, 1 / 12), -9));
+            bla.oscs[1].angVel = freqToVel((110 / 3) * Math.pow(Math.pow(2, 1 / 12), m.value) * Math.pow(Math.pow(2, 1 / 12), -9));
 
-            console.log(bla.oscs[0].angVel);
+            //console.log(bla.oscs[0].angVel);
         }
 
         if(m.type === "noteOff") {
