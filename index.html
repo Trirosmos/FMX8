@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<meta charset="utf8">
+
+<html>
+    <head>
+        <title> FM Synth </title>
+    </head>
+
+    <body>
+        <script type = "text/javascript">
+            var insts;
+            var currentInst = 0;
+            var operatorAllocation = [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1];
+            var midiChannels = {};
+            var aCtx;
+            var node;
+
+            let sinLUT = [];
+            let expLUT = [];
+
+            function initLUTs() {
+                for(let i = 0; i < 4096; i++) {
+                    let step = (1/ 4096) * i;
+                    expLUT[i] = fp(Math.exp(step) / Math.exp(1));
+                }
+
+                expLUT[0] = 0;
+
+                for(let i = 0; i < 4096; i++) {
+                    let step = (1/ 4096) * i;
+                    let angle = ((2 * Math.PI) * step) + (Math.PI / 180);
+                    sinLUT[i] = fp(Math.sin(angle));
+                }
+            }
+
+            function fp(valor) {
+                return Math.round(valor * 65536);
+            }
+
+            function fpmul(l, r) {
+                return Math.round((l * r) / 65536);
+            }
+
+            function getEXP(value) {
+                return expLUT[fpmul(value, 4096)];
+            }
+
+            function getSIN(value) {
+                return sinLUT[(value & fp(4095)) >> 16];
+            }
+
+            function runEG(eg) {
+                switch(eg.state) {
+                    case 0:
+                        eg.out += eg.a;
+                        if(eg.out >= fp(1)) {
+                            eg.out = fp(1);
+                            eg.state++;
+                        }
+                    break;
+                    case 1:
+                        eg.out -= eg.d;
+                        if(eg.out <= eg.s) {
+                            eg.out = eg.s;
+                            eg.state++;
+                        }
+                    break;
+                    case 3:
+                        eg.out -= d;
+                        if(eg.out < fp(0)) {
+                            eg.out = fp(0);
+                            eg.state++;
+                        }
+                    break;
+                }
+            }
+
+            function getEG() {
+                let eg = {
+                    state: 0,
+                    a: fp(0.01),
+                    d: fp(0.001),
+                    s: fp(0.5),
+                    r: fp(0.01),
+                    out: 0
+                };
+
+                return eg;
+            }
+
+            function runOSCs(voice) {
+                let oscOUTS = [];
+                let outAccum = 0;
+                
+                for(let o = 0; o < 8; o ++) {
+                    let phase = voice.oscs[o].phaseAccum;
+                    for(let m = 0; m < 8; m++) {
+                        let mod = fpmul(voice.oscs[m].lastOut, voice.oscs[o].mod[m]);
+                        phase += mod;
+                    }
+
+                    outAccum += fpmul(fpmul(getSIN(phase), voice.oscs[o].eg.out), voice.oscs[o].vol);
+                    oscOUTS[o] = getSIN(voice.oscs[o].phaseAccum);
+                    voice.oscs[o].phaseAccum += voice.oscs[o].angVel;
+                    voice.oscs[o].phaseAccum &= fp(4095);
+                }
+
+                for(let o = 0; o < 8; o++) {
+                    voice.oscs[o].lastOut = voice.oscs[o].out;
+                    voice.oscs[o].out = oscOUTS[o];
+                }
+
+                for(let o = 0; o < 8; o++) {
+                    runEG(voice.oscs[o].eg);
+                }
+
+                return outAccum / 65536;
+            }
+
+            function getOSC() {
+                let OSC = {
+                    mod: [0,0,0,0,0,0,0,0],
+                    out: 0,
+                    lastOut: 0,
+                    phaseAccum: 0,
+                    angVel: 0,
+                    vol: 0,
+                    eg: getEG()
+                };
+
+                return OSC;
+            }
+
+            function getVoice() {
+                let voice = {
+                    oscs: []
+                };
+
+                for(let x = 0; x < 8; x++) {
+                    voice.oscs.push(getOSC());
+                }
+
+                return voice;
+            }
+
+            function startAudioContext() {                
+                aCtx.audioWorklet.addModule('sound.js').then(() => {
+                class fmSynth extends AudioWorkletNode {
+                    constructor(context) {
+                        super(context, 'fmSynth');
+                    }
+                }
+                  node = new fmSynth(aCtx);
+
+                  node.port.postMessage({type: "patchEdit", value: insts});
+
+                  console.log("Iniciou!");
+
+                  var gain = aCtx.createGain();
+                  gain.gain.value = 0.5;
+
+                  node.connect(gain);
+                  gain.connect(aCtx.destination);
+                });
+            }
+
+            initLUTs();
+            var bla = getVoice();
+            bla.oscs[0].angVel = fp(25);
+            bla.oscs[1].angVel = fp(12.5);
+            bla.oscs[0].vol = fp(1);
+            //bla.oscs[0].mod[1] = fp(4096);
+
+            var c = document.createElement("canvas");
+            c.width = 1900;
+            c.height = 600;
+            document.body.appendChild(c);
+
+            var ctx = c.getContext("2d");
+
+            for(let x = 0; x < 1000; x++) {
+                let output = runOSCs(bla);
+                ctx.fillRect(x, 240 + (output * 240), 1, 1);
+            }
+
+            window.addEventListener("mousedown",function(){
+                if(aCtx === undefined) {
+                    aCtx = new AudioContext();
+                    startAudioContext();
+                }
+            });
+
+            window.addEventListener("mouseup",function(){
+                if(aCtx === undefined) {
+                    aCtx = new AudioContext();
+                    startAudioContext();
+                }
+            });
+
+            let keyCodes = [90,83,88,68,67,86,71,66,72,78,74,77,188];
+            let keys = [false, false, false, false,
+            false, false, false, false,
+            false, false, false, false,
+            false];
+
+            window.addEventListener("keydown",function(e){
+                if(aCtx === undefined) {
+                    aCtx = new AudioContext();
+                    startAudioContext();
+                }
+
+                let onde = keyCodes.indexOf(e.keyCode); 
+
+                if(onde !== -1) {
+                    if(node && !keys[onde]) {
+                        node.port.postMessage({type: "noteOn", value: onde});
+                        keys[onde] = true;
+                    }
+                }
+                
+            });
+
+            window.addEventListener("keyup",function(e){
+                if(aCtx === undefined) {
+                    aCtx = new AudioContext();
+                    startAudioContext();
+                }
+
+                let onde = keyCodes.indexOf(e.keyCode); 
+
+                if(onde !== -1) {
+                    if(node && keys[onde]) {
+                        node.port.postMessage({type: "noteOff", value: onde});
+                        keys[onde] = false;
+                    }
+                }
+            });
+
+        </script>
+    </body>
+</html>
