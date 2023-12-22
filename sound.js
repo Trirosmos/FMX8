@@ -10,12 +10,18 @@ let sinLUT = [];
 let expLUT = [];
 
 function initLUTs() {
-    for(let i = 0; i < 4096; i++) {
-        let step = (1 / 4096) * i;
-        expLUT[i] = fp(Math.exp(step) / Math.exp(1));
+    //80 dB of dynamic range in 4096 steps -> Ratio of 10000
+    //0.01953125 dB per step -> Ratio of 1.0022511482929128 between adjacent steps
+    expLUT[0] = 0;
+    expLUT[1] = 1 / 1e4;
+
+    for(let i = 2; i < 4096; i++) {
+        expLUT[i] = expLUT[i - 1] * 1.0022511482929128;
     }
 
-    expLUT[0] = 0;
+    for(let i = 0; i < 4096; i++) {
+        expLUT[i] = fp(expLUT[i]);
+    }
 
     for(let i = 0; i < 4096; i++) {
         let step = (1 / 4096) * i;
@@ -162,8 +168,8 @@ var bla = getVoice();
 bla.oscs[1].angVel = freqToVel(445);
 bla.oscs[0].angVel = freqToVel(445);
 bla.oscs[0].vol = fp(1);
-bla.oscs[0].mod[0] = fp(1024);
-bla.oscs[0].mod[1] = fp(256);
+bla.oscs[0].mod[0] = fp(600);
+bla.oscs[0].mod[1] = fp(1024);
 
 bla.oscs[0].eg.a = fp(0.01);
 bla.oscs[0].eg.d = fp(0.00001);
