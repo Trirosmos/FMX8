@@ -52,23 +52,27 @@ function getSIN(value) {
 function runEG(eg) {
     switch(eg.state) {
         case 0:
-            eg.out += getEXP(eg.a);
+            eg.out += eg.a;
             if(eg.out >= fp(1)) {
                 eg.out = fp(1);
                 eg.state++;
+                console.log("Decay");
             }
         break;
         case 1:
-            eg.out -= getEXP(eg.d);
+            eg.out -= eg.d;
             if(eg.out <= eg.s) {
                 eg.out = eg.s;
                 eg.state++;
+                console.log("Sustain");
             }
         break;
         case 3:
-            eg.out -= getEXP(eg.d);
+            eg.out -= eg.r;
             if(eg.out < fp(0)) {
                 eg.out = fp(0);
+                eg.state++;
+                console.log("Released");
             }
         break;
     }
@@ -91,7 +95,9 @@ function runOSCs(voice) {
     let oscOUTS = [];
     let outAccum = 0;
 
-    for(let o = 0; o < 8; o ++) {
+    let oscAmount = 8;
+
+    for(let o = 0; o < oscAmount; o ++) {
         let phase = voice.oscs[o].phaseAccum;
         for(let m = 0; m < 8; m++) {
             let mod;
@@ -106,14 +112,18 @@ function runOSCs(voice) {
         voice.oscs[o].phaseAccum &= (fp(4095) | 65535);
     }
 
-    for(let o = 0; o < 8; o++) {
+    for(let o = 0; o < oscAmount; o++) {
         voice.oscs[o].lastOut = voice.oscs[o].out;
         voice.oscs[o].out = oscOUTS[o];
     }
 
-    for(let o = 0; o < 8; o++) {
-        runEG(voice.oscs[o].eg);
+    if(voice.egCounter === 7) {
+        for(let o = 0; o < oscAmount; o++) {
+            runEG(voice.oscs[o].eg);
+        }
+        voice.egCounter = 0;
     }
+    else voice.egCounter++;
 
     return outAccum / 65536;
 }
@@ -134,7 +144,8 @@ function getOSC() {
 
 function getVoice() {
     let voice = {
-        oscs: []
+        oscs: [],
+        egCounter: 0,
     };
 
     for(let x = 0; x < 8; x++) {
@@ -153,6 +164,7 @@ function noteOn(voice) {
 
 function noteOff(voice) {
     for(let o = 0; o < 8; o++) {
+        voice.oscs[o].eg.out = voice.oscs[o].eg.s;
         voice.oscs[o].eg.state = 3;
     }
 }
@@ -170,10 +182,10 @@ var bla = getVoice();
 bla.oscs[1].angVel = freqToVel(445);
 bla.oscs[0].angVel = freqToVel(445);
 bla.oscs[0].vol = fp(1);
-//bla.oscs[0].mod[0] = fp(600);
-//bla.oscs[0].mod[1] = fp(2048);
-//bla.oscs[0].mod[2] = fp(600);
-//bla.oscs[0].mod[3] = fp(600);
+bla.oscs[0].mod[0] = fp(600);
+bla.oscs[0].mod[1] = fp(2048);
+bla.oscs[0].mod[2] = fp(600);
+bla.oscs[0].mod[3] = fp(600);
 
 bla.oscs[0].eg.a = fp(1);
 bla.oscs[0].eg.d = fp(0.00001);
@@ -185,6 +197,8 @@ bla.oscs[0].eg.d = fp(0.00001);
 //bla.oscs[0].eg.d = 0.01;
 
 initLUTs();
+
+let currentNote = 0;
 
 class fmSynth extends AudioWorkletProcessor {
   constructor() {
@@ -201,6 +215,12 @@ class fmSynth extends AudioWorkletProcessor {
     for(let x = 0; x < chan0.length; x++) {
         chan0[x] = runOSCs(bla);
     }
+
+      messages.sort(function (a, b) {
+          if(a.time < b.time) return -1;
+          if(a.time > b.time) return 1;
+          else return 0;
+      });
       
     while(messages.length > 0) {
         let m = messages[0];
@@ -212,30 +232,32 @@ class fmSynth extends AudioWorkletProcessor {
             bla.oscs[2].angVel = freqToVel(435 * Math.pow(Math.pow(2, 1 / 12), m.value) * Math.pow(Math.pow(2, 1 / 12), -9));
             bla.oscs[3].angVel = freqToVel(445 * Math.pow(Math.pow(2, 1 / 12), m.value) * Math.pow(Math.pow(2, 1 / 12), -9));
 
+            currentNote = m.value;
+
             //console.log(bla.oscs[0].angVel);
         }
 
         if(m.type === "noteOff") {
-            noteOff(bla);
+            if(m.value == currentNote) noteOff(bla);
         }
 
         if(m.type === "paramChange")
         {
             switch(m.param) {
                 case "a":
-                    bla.oscs[m.channel].eg.a = fp(m.value);
+                    bla.oscs[m.channel].eg.a = getEXP(fp(m.value)) + 1;
                     break;
                 
                 case "d":
-                        bla.oscs[m.channel].eg.d = fp(m.value);
+                        bla.oscs[m.channel].eg.d = getEXP(fp(m.value / 3.5));
                 break;
                 
                 case "s":
-                        bla.oscs[m.channel].eg.s = fp(m.value);
+                        bla.oscs[m.channel].eg.s = getEXP(fp(m.value));
                 break;
                 
                 case "r":
-                        bla.oscs[m.channel].eg.r = fp(m.value);
+                        bla.oscs[m.channel].eg.r = getEXP(fp(m.value)) + 1;
                 break;
             }
 

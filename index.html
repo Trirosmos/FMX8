@@ -87,7 +87,7 @@
                     selectedKnob.tick.style.transform = "rotate(" + angle + "deg)";
                     selectedKnob.ratio = ratio;
 
-                    node.port.postMessage({type: "paramChange", param: selectedKnob.msgTemplate.param, value: ratio, channel: selectedKnob.msgTemplate.channel});
+                    node.port.postMessage({type: "paramChange", param: selectedKnob.msgTemplate.param, value: ratio, channel: selectedKnob.msgTemplate.channel, time: aCtx.currentTime});
                 }
             });
 
@@ -285,7 +285,7 @@
                 }
                   node = new fmSynth(aCtx);
 
-                  node.port.postMessage({type: "patchEdit", value: insts});
+                  node.port.postMessage({type: "patchEdit", value: insts, time: aCtx.currentTime});
 
                   console.log("Iniciou!");
 
@@ -346,7 +346,7 @@
 
                 if(onde !== -1) {
                     if(node && !keys[onde]) {
-                        node.port.postMessage({type: "noteOn", value: onde});
+                        node.port.postMessage({type: "noteOn", value: onde, time: aCtx.currentTime});
                         keys[onde] = true;
                     }
                 }                
@@ -362,7 +362,7 @@
 
                 if(onde !== -1) {
                     if(node && keys[onde]) {
-                        node.port.postMessage({type: "noteOff", value: onde});
+                        node.port.postMessage({type: "noteOff", value: onde, time: aCtx.currentTime});
                         keys[onde] = false;
                     }
                 }
