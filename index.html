@@ -6,6 +6,54 @@
         <title> FM Synth </title>
     </head>
 
+    <style>
+        .op {
+            display: flex;
+            flex-direction: column;
+            background-color: #f05030;
+            border-radius: calc(5%);
+            margin: 1%;
+        }
+
+        .op_container {
+            display: grid;
+            grid-template-columns: 33% 33% 33%;
+            grid-template-rows: 33% 33% 33%;
+            width: calc(80%);
+            height: calc(80%);
+            position: absolute;
+            left: calc(10%);
+            top: calc(10%);
+        }
+
+        .butao {
+            background-color: #f07050;
+            display: block;
+            width: 1.2vw;
+            height: 1.2vw;
+            border-radius: 50%;
+        }
+
+        .tray {
+            position: relative;
+            left: 10%;
+            width: 80%;
+            height: 30%;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .mostrador {
+            background-color: #804030;
+            width: 0.6vw;
+            height: 0.25vw;
+            border-radius: 25%;
+            position: relative;
+            top: calc(50% - 0.125vw);
+            transform-origin: 100% 50%;
+        }
+    </style>
+
     <body>
         <script type = "text/javascript">
             var insts;
@@ -17,6 +65,77 @@
 
             let sinLUT = [];
             let expLUT = [];
+
+            var selectedKnob;
+
+            var container = document.createElement("div");
+            container.classList.add("op_container");
+            document.body.appendChild(container);
+
+            window.addEventListener("mouseup", function(){
+                selectedKnob = undefined;
+            });
+
+            window.addEventListener("mousemove", function(e){
+                if(selectedKnob) {
+                    var centerX = selectedKnob.getBoundingClientRect();
+                    centerX = (centerX.left + centerX.right) / 2;
+
+                    var dif = e.x - centerX;
+                    var angle = Math.min(Math.max((180 + dif), -45), 180 + 45);
+                    var ratio = (angle + 45)/(180 + 90);
+                    selectedKnob.tick.style.transform = "rotate(" + angle + "deg)";
+                    selectedKnob.ratio = ratio;
+
+                    node.port.postMessage({type: "paramChange", param: selectedKnob.msgTemplate.param, value: ratio, channel: selectedKnob.msgTemplate.channel});
+                }
+            });
+
+            function criarButao(msgTemplate) {
+                var butao = document.createElement("div");
+                butao.classList.add("butao");
+
+                butao.msgTemplate = msgTemplate;
+
+                var mostrador = document.createElement("div");
+                mostrador.classList.add("mostrador");
+                mostrador.style.transform = "rotate(157deg)";
+                butao.appendChild(mostrador);
+
+                butao.tick = mostrador;
+
+                function selectButao() {
+                    selectedKnob = butao;
+                    mostrador.style.transform = "rotate(" + Math.round(Math.random() * 360) + "deg)";
+                }
+
+                butao.addEventListener("mousedown", selectButao);
+
+                return butao;
+            }
+
+            function criarTray(channel) {
+                var tray = document.createElement("div");
+                tray.classList.add("tray");
+
+                tray.appendChild(criarButao({param: "a", channel: channel}));
+                tray.appendChild(criarButao({param: "d", channel: channel}));
+                tray.appendChild(criarButao({param: "s", channel: channel}));
+                tray.appendChild(criarButao({param: "r", channel: channel}));
+
+                return tray;
+            }
+
+            function createOpView() {
+                var op = document.createElement("div");
+                op.classList.add("op");                
+
+                op.appendChild(criarTray(0));
+
+                return op;
+            }
+
+            container.appendChild(createOpView());
 
             function initLUTs() {
                 //80 dB of dynamic range in 4096 steps -> Ratio of 10000
@@ -49,7 +168,10 @@
             }
 
             function getEXP(value) {
-                return expLUT[fpmul(value, 4096)];
+                let product = fpmul(fp(value), 4096);
+                let min = Math.min(product, fp(4095));
+                let max = Math.max(min, 0);
+                return expLUT[max >> 16];
             }
 
             function getSIN(value) {

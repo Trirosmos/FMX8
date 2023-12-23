@@ -39,7 +39,10 @@ function fpmul(l, r) {
 }
 
 function getEXP(value) {
-    return expLUT[fpmul(value, 4096)];
+    let product = fpmul(fp(value), 4096);
+    let min = Math.min(product, fp(4095));
+    let max = Math.max(min, 0);
+    return expLUT[max >> 16];
 }
 
 function getSIN(value) {
@@ -49,24 +52,23 @@ function getSIN(value) {
 function runEG(eg) {
     switch(eg.state) {
         case 0:
-            eg.out += eg.a;
+            eg.out += getEXP(eg.a);
             if(eg.out >= fp(1)) {
                 eg.out = fp(1);
                 eg.state++;
             }
         break;
         case 1:
-            eg.out -= eg.d;
+            eg.out -= getEXP(eg.d);
             if(eg.out <= eg.s) {
                 eg.out = eg.s;
                 eg.state++;
             }
         break;
         case 3:
-            eg.out -= eg.d;
+            eg.out -= getEXP(eg.d);
             if(eg.out < fp(0)) {
                 eg.out = fp(0);
-                eg.state++;
             }
         break;
     }
@@ -168,11 +170,16 @@ var bla = getVoice();
 bla.oscs[1].angVel = freqToVel(445);
 bla.oscs[0].angVel = freqToVel(445);
 bla.oscs[0].vol = fp(1);
-bla.oscs[0].mod[0] = fp(600);
-bla.oscs[0].mod[1] = fp(1024);
+//bla.oscs[0].mod[0] = fp(600);
+//bla.oscs[0].mod[1] = fp(2048);
+//bla.oscs[0].mod[2] = fp(600);
+//bla.oscs[0].mod[3] = fp(600);
 
-bla.oscs[0].eg.a = fp(0.01);
+bla.oscs[0].eg.a = fp(1);
 bla.oscs[0].eg.d = fp(0.00001);
+
+//bla.oscs[1].eg.a = fp(0.000005);
+//bla.oscs[1].eg.d = fp(0.00001);
 
 
 //bla.oscs[0].eg.d = 0.01;
@@ -200,14 +207,39 @@ class fmSynth extends AudioWorkletProcessor {
         if(m.type === "noteOn") {
             noteOn(bla);
 
-            bla.oscs[0].angVel = freqToVel(110 * Math.pow(Math.pow(2, 1 / 12), m.value) * Math.pow(Math.pow(2, 1 / 12), -9));
-            bla.oscs[1].angVel = freqToVel((110 / 2) * Math.pow(Math.pow(2, 1 / 12), m.value) * Math.pow(Math.pow(2, 1 / 12), -9));
+            bla.oscs[0].angVel = freqToVel(440 * Math.pow(Math.pow(2, 1 / 12), m.value) * Math.pow(Math.pow(2, 1 / 12), -9));
+            bla.oscs[1].angVel = freqToVel((440 / 2) * Math.pow(Math.pow(2, 1 / 12), m.value) * Math.pow(Math.pow(2, 1 / 12), -9));
+            bla.oscs[2].angVel = freqToVel(435 * Math.pow(Math.pow(2, 1 / 12), m.value) * Math.pow(Math.pow(2, 1 / 12), -9));
+            bla.oscs[3].angVel = freqToVel(445 * Math.pow(Math.pow(2, 1 / 12), m.value) * Math.pow(Math.pow(2, 1 / 12), -9));
 
             //console.log(bla.oscs[0].angVel);
         }
 
         if(m.type === "noteOff") {
             noteOff(bla);
+        }
+
+        if(m.type === "paramChange")
+        {
+            switch(m.param) {
+                case "a":
+                    bla.oscs[m.channel].eg.a = fp(m.value);
+                    break;
+                
+                case "d":
+                        bla.oscs[m.channel].eg.d = fp(m.value);
+                break;
+                
+                case "s":
+                        bla.oscs[m.channel].eg.s = fp(m.value);
+                break;
+                
+                case "r":
+                        bla.oscs[m.channel].eg.r = fp(m.value);
+                break;
+            }
+
+            console.log(bla.oscs[0].eg);
         }
 
         messages.splice(0, 1);
